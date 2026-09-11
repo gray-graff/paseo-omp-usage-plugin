@@ -1,6 +1,6 @@
 # omp-usage-plugin
 
-A local [Paseo](https://paseo.sh) plugin that surfaces your [Oh My Pi](https://ohmypica.dev) (OMP) plan quotas — composer pill, popover, workspace panel, and a settings screen.
+A local [Paseo](https://paseo.sh) plugin that surfaces your [Oh My Pi](https://omp.sh) (OMP) plan quotas — composer pill, popover, workspace panel, and a settings screen.
 
 OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --json`) reports per-provider credit quotas with rolling windows; this plugin puts those numbers where you can see them while you work.
 
@@ -13,6 +13,12 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 | **Workspace panel** | The same cards in the agent panel (`Plan usage`), for workspace and explorer locations. |
 | **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, with the snapshot timestamp. |
 | **Command center** | `Open plan usage` opens the panel. |
+
+## Screenshots
+
+| Z.AI plan | Codex plan |
+| --- | --- |
+| ![Z.AI popover](docs/screenshots/zai-popover.png) | ![Codex popover](docs/screenshots/codex-popover.png) |
 
 ## Plan binding and fallback
 
