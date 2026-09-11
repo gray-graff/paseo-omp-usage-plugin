@@ -208,6 +208,19 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
         });
         watchTimeline(agent.id);
       }
+      const freshIds = new Set(result.entries.map(({ agent }) => agent.id));
+      for (const agentId of [...agents.keys()]) {
+        if (freshIds.has(agentId)) continue;
+        pills.get(agentId)?.remove();
+        pills.delete(agentId);
+        pillChrome.delete(agentId);
+        agents.delete(agentId);
+        snapshots.delete(agentId);
+        notify(agentId);
+        unsubTimelines.get(agentId)?.();
+        unsubTimelines.delete(agentId);
+        timelineRefreshes.delete(agentId);
+      }
       syncPills();
     } catch (error) {
       console.warn("omp-usage: agent list failed", error);
@@ -234,6 +247,7 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
 
     unsubAgents = paseo.agents.subscribe((update) => {
       if (update.kind === "remove") {
+        pills.get(update.agentId)?.remove();
         pills.delete(update.agentId);
         pillChrome.delete(update.agentId);
         agents.delete(update.agentId);
@@ -267,6 +281,7 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
   }
 
   function stop(): void {
+    stopped = true;
     unsubAgents?.();
     unsubAgents = null;
     if (timer) {
@@ -275,6 +290,7 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
     }
     for (const registration of pills.values()) registration.remove();
     pills.clear();
+    pillChrome.clear();
     agents.clear();
     snapshots.clear();
     for (const unsubscribe of unsubTimelines.values()) unsubscribe();

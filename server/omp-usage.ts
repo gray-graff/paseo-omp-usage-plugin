@@ -88,7 +88,9 @@ function runOmpUsageJson(): Promise<string> {
     if (code === 0) {
       resolve(stdout);
     } else {
-      reject(new Error(`omp usage exited with ${code}: ${stderr.trim().slice(0, 300) || "no stderr"}`));
+      const trimmed = stderr.trim();
+      if (trimmed) console.error(`omp usage stderr (exit ${code}):`, trimmed);
+      reject(new Error(`omp usage exited with ${code}`));
     }
   });
 
