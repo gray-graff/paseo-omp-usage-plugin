@@ -16,9 +16,9 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 
 ## Screenshots
 
-| Z.AI plan | Codex plan |
-| --- | --- |
-| ![Z.AI popover](docs/screenshots/zai-popover.png) | ![Codex popover](docs/screenshots/codex-popover.png) |
+| Z.AI plan | Codex plan | Settings screen |
+| --- | --- | --- |
+| ![Z.AI popover](docs/screenshots/zai-popover.png) | ![Codex popover](docs/screenshots/codex-popover.png) | ![Settings screen](docs/screenshots/settings-screen.png) |
 
 ## Plan binding and fallback
 
