@@ -119,12 +119,45 @@ export function windowAppliesToModel(window: OmpUsageWindow, model: string | nul
   return strip(model).includes(strip(window.modelId));
 }
 
-/** Windows that apply to the model, shortest first: 5 hours, then week, then month. */
+/**
+ * Windows that apply to the model, shortest first: 5 hours, then week, then month.
+ *
+ * Codex mirrors OMP v18.1.20's `scopeCodexLimitsForRequest`: a Spark model
+ * consumes only `openai-codex:spark:*`; every other Codex model consumes only
+ * the chat windows `primary` and `secondary`.
+ */
 export function pillWindows(report: OmpUsageReport, model: string | null | undefined): OmpUsageWindow[] {
-  return report.windows
-    .filter((window) => windowAppliesToModel(window, model))
-    .sort((a, b) => windowRank(a) - windowRank(b) || a.id.localeCompare(b.id));
+  let windows: OmpUsageWindow[];
+  if (report.provider === "openai-codex") {
+    const isSparkModel = report.windows.some(
+      (window) =>
+        window.id.startsWith("openai-codex:spark:") && windowAppliesToModel(window, model),
+    );
+    windows = isSparkModel
+      ? report.windows.filter(
+          (window) =>
+            window.id.startsWith("openai-codex:spark:") && windowAppliesToModel(window, model),
+        )
+      : report.windows.filter(
+          (window) =>
+            window.id === "openai-codex:primary" || window.id === "openai-codex:secondary",
+        );
+  } else {
+    windows = report.windows.filter((window) => windowAppliesToModel(window, model));
+  }
+  return windows.sort((a, b) => windowRank(a) - windowRank(b) || a.id.localeCompare(b.id));
 }
+/**
+ * Windows the compact indicator can represent. The text and tick gauge share
+ * this list, so a missing fraction never shifts their positions or gains color.
+ */
+export function pillDisplayWindows(
+  report: OmpUsageReport,
+  model: string | null | undefined,
+): OmpUsageWindow[] {
+  return pillWindows(report, model).filter((window) => window.usedFraction !== null);
+}
+
 
 /** Card order: account-wide quotas first, then model tiers, shortest window first. */
 export function cardWindows(report: OmpUsageReport): OmpUsageWindow[] {
@@ -138,11 +171,11 @@ export function cardWindows(report: OmpUsageReport): OmpUsageWindow[] {
 
 /**
  * Composer-pill text: `Codex 22/0%`, or `Codex 22%` when one window applies.
- * Percentages join with `/` under a single `%`; a window without a fraction is
- * skipped rather than reported as 0%.
+ * Percentages join with `/` under a single `%`; the matching tick gauge uses
+ * the same known-fraction windows.
  */
 export function pillText(report: OmpUsageReport, model: string | null | undefined): string {
-  const percents = pillWindows(report, model)
+  const percents = pillDisplayWindows(report, model)
     .map((window) => percentOf(window.usedFraction))
     .filter((percent): percent is number => percent !== null);
   const name = providerShortName(report.provider);

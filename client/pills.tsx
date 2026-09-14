@@ -6,8 +6,8 @@ import {
   OMP_USAGE_REFRESH_MS,
   fallbackModelFromTimeline,
   percentOf,
+  pillDisplayWindows,
   pillText,
-  pillWindows,
   usageProvidersForModel,
   type OmpUsagePayload,
   type OmpUsageWindow,
@@ -130,7 +130,7 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
       return;
     }
     const model = agent.fallbackModel ?? agent.baseModel;
-    const windows = pillWindows(report, model);
+    const windows = pillDisplayWindows(report, model);
     const title = `${report.displayName} plan usage`;
     const icon = gaugeIcon(windows);
     const label = pillText(report, model);
