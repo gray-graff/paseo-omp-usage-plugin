@@ -19,10 +19,17 @@ export const ompUsageRpc = defineRpc({
           z.object({
             id: z.string(),
             label: z.string(),
+            /** OMP window id: `5h`, `7d`, `monthly`, …; null when the provider omits it. */
+            windowId: z.string().nullable(),
+            /** Null for windows OMP reports without a duration, such as `monthly`. */
+            durationMs: z.number().nullable(),
+            /** Set on quotas that belong to one model instead of the whole account. */
+            tier: z.string().nullable(),
+            modelId: z.string().nullable(),
             used: z.number().nullable(),
             limit: z.number().nullable(),
             unit: z.string().nullable(),
-            usedFraction: z.number(),
+            usedFraction: z.number().nullable(),
             resetsAt: z.number().nullable(),
           }),
         ),
@@ -42,8 +49,25 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   "openai-codex": "Codex",
 };
 
+/** Names short enough to survive a phone-width composer pill. */
+const PROVIDER_SHORT_NAMES: Record<string, string> = {
+  zai: "Z.AI",
+  "opencode-go": "Go",
+  "openai-codex": "Codex",
+};
+
+/** Verified from `omp models --json` at OMP 18.1.20; unknown models never guess Spark. */
+const CONFIRMED_CODEX_SPARK_MODEL_IDS: Record<string, true> = {
+  gpt53codexspark: true,
+};
+
+
 export function providerDisplayName(provider: string): string {
   return PROVIDER_DISPLAY_NAMES[provider] ?? provider;
+}
+
+export function providerShortName(provider: string): string {
+  return PROVIDER_SHORT_NAMES[provider] ?? providerDisplayName(provider);
 }
 
 /** Model reference `provider/id` → provider segment, or the agent provider itself. */
@@ -63,9 +87,110 @@ export function usageProvidersForModel(model: string | null | undefined, agentPr
   }
   return agentProvider ? [agentProvider] : [];
 }
-/** Pill shows the first two windows (short session window, then long period) as NN%/NN%. */
-export function pillWindowPercents(report: OmpUsageReport): number[] {
-  return report.windows.slice(0, 2).map((window) => window.usedFraction);
+
+export type UsageTone = "normal" | "warning" | "danger";
+
+/** Rounded percentage the UI shows; null when the window reports no fraction. */
+export function percentOf(fraction: number | null): number | null {
+  if (fraction === null || !Number.isFinite(fraction)) return null;
+  return Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+}
+
+/** Tone from the number on screen: under 70% neutral, 70-89% amber, 90% and up red. */
+export function toneForPercent(percent: number | null): UsageTone {
+  if (percent === null) return "normal";
+  if (percent >= 90) return "danger";
+  if (percent >= 70) return "warning";
+  return "normal";
+}
+
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** OMP omits `durationMs` on some windows (`monthly`); rank those after every timed one. */
+function windowRank(window: OmpUsageWindow): number {
+  if (window.durationMs !== null) return window.durationMs;
+  return window.windowId === "monthly" ? MONTH_MS : Number.MAX_SAFE_INTEGER;
+}
+
+function normalizeModelRef(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * A quota with a tier belongs to the one model it names. OMP reports that model
+ * as a display name (`GPT-5.3-Codex-Spark`) while the agent carries a selector
+ * (`openai-codex/gpt-5.3-codex-spark`), so compare normalized text. A tier
+ * without a model id stays unproven and never reaches the indicator.
+ */
+export function windowAppliesToModel(window: OmpUsageWindow, model: string | null | undefined): boolean {
+  if (window.tier === null) return true;
+  if (!model || !window.modelId) return false;
+  return normalizeModelRef(model).includes(normalizeModelRef(window.modelId));
+}
+
+/** Spark is a model property, not a property of whatever usage windows arrived. */
+function isConfirmedCodexSparkModel(model: string | null | undefined): boolean {
+  if (!model || modelProviderPrefix(model) !== "openai-codex") return false;
+  const slash = model.indexOf("/");
+  const modelId = slash === -1 ? model : model.slice(slash + 1);
+  return CONFIRMED_CODEX_SPARK_MODEL_IDS[normalizeModelRef(modelId)] === true;
+}
+
+/**
+ * Windows that apply to the model, shortest first: 5 hours, then week, then month.
+ *
+ * Codex mirrors OMP v18.1.20's `scopeCodexLimitsForRequest`: a Spark model
+ * consumes only `openai-codex:spark:*`; every other Codex model consumes only
+ * the chat windows `primary` and `secondary`.
+ */
+export function pillWindows(report: OmpUsageReport, model: string | null | undefined): OmpUsageWindow[] {
+  let windows: OmpUsageWindow[];
+  if (report.provider === "openai-codex") {
+    const isSparkModel = isConfirmedCodexSparkModel(model);
+    windows = isSparkModel
+      ? report.windows.filter((window) => window.id.startsWith("openai-codex:spark:"))
+      : report.windows.filter(
+          (window) =>
+            window.id === "openai-codex:primary" || window.id === "openai-codex:secondary",
+        );
+  } else {
+    windows = report.windows.filter((window) => windowAppliesToModel(window, model));
+  }
+  return windows.sort((a, b) => windowRank(a) - windowRank(b) || a.id.localeCompare(b.id));
+}
+/**
+ * Windows the compact indicator can represent. The text and tick gauge share
+ * this list, so a missing fraction never shifts their positions or gains color.
+ */
+export function pillDisplayWindows(
+  report: OmpUsageReport,
+  model: string | null | undefined,
+): OmpUsageWindow[] {
+  return pillWindows(report, model).filter((window) => window.usedFraction !== null);
+}
+
+
+/** Card order: account-wide quotas first, then model tiers, shortest window first. */
+export function cardWindows(report: OmpUsageReport): OmpUsageWindow[] {
+  return [...report.windows].sort(
+    (a, b) =>
+      Number(a.tier !== null) - Number(b.tier !== null) ||
+      windowRank(a) - windowRank(b) ||
+      a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * Composer-pill text: `Codex 22/0%`, or `Codex 22%` when one window applies.
+ * Percentages join with `/` under a single `%`; the matching tick gauge uses
+ * the same known-fraction windows.
+ */
+export function pillText(report: OmpUsageReport, model: string | null | undefined): string {
+  const percents = pillDisplayWindows(report, model)
+    .map((window) => percentOf(window.usedFraction))
+    .filter((percent): percent is number => percent !== null);
+  const name = providerShortName(report.provider);
+  return percents.length === 0 ? `${name} —` : `${name} ${percents.join("/")}%`;
 }
 
 type TimelinePage = {
@@ -85,14 +210,6 @@ export function fallbackModelFromTimeline(page: unknown): string | null {
     }
   }
   return null;
-}
-/** Hottest window fraction of a report, for pill labels. */
-export function hottestWindowFraction(report: OmpUsageReport): number {
-  let hottest = 0;
-  for (const window of report.windows) {
-    if (window.usedFraction > hottest) hottest = window.usedFraction;
-  }
-  return hottest;
 }
 
 export function formatReset(resetsAt: number | null): string | null {

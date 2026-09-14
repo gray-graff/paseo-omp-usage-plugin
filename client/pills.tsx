@@ -5,10 +5,12 @@ import { View } from "react-native";
 import {
   OMP_USAGE_REFRESH_MS,
   fallbackModelFromTimeline,
-  hottestWindowFraction,
-  pillWindowPercents,
+  percentOf,
+  pillDisplayWindows,
+  pillText,
   usageProvidersForModel,
   type OmpUsagePayload,
+  type OmpUsageWindow,
 } from "../shared/usage";
 import { toneFor } from "./usage-cards";
 import { UsagePopover } from "./usage-popover";
@@ -59,18 +61,30 @@ export function stopPillManager(): void {
   activeManager = null;
 }
 
-/** Host renders custom icon components; a status dot is the one place pill color is ours. */
-function statusDotIcon(fraction: number): ComponentType<PluginButtonIconProps> {
-  return function PillStatusDot({ theme, size }: PluginButtonIconProps) {
+/**
+ * A composer pill always renders its icon, so the pill's color signal lives in
+ * that fixed slot: one tick per applicable window, colored like its bar.
+ */
+function gaugeIcon(windows: OmpUsageWindow[]): ComponentType<PluginButtonIconProps> {
+  return function PillGauge({ theme, size }: PluginButtonIconProps) {
+    const gap = 2;
+    const count = Math.max(1, windows.length);
+    // Capped so a lone window still reads as a tick rather than as the status dot it replaced.
+    const tickHeight = Math.max(2, Math.min(4, Math.floor((size - (count - 1) * gap) / count)));
     return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: theme.colors[toneFor(fraction)],
-        }}
-      />
+      <View style={{ gap, alignItems: "center", justifyContent: "center" }}>
+        {windows.map((window) => (
+          <View
+            key={window.id}
+            style={{
+              width: size,
+              height: tickHeight,
+              borderRadius: tickHeight / 2,
+              backgroundColor: theme.colors[toneFor(window.usedFraction)],
+            }}
+          />
+        ))}
+      </View>
     );
   };
 }
@@ -115,10 +129,14 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
       pillChrome.delete(agent.id);
       return;
     }
+    const model = agent.fallbackModel ?? agent.baseModel;
+    const windows = pillDisplayWindows(report, model);
     const title = `${report.displayName} plan usage`;
-    const icon = statusDotIcon(hottestWindowFraction(report));
-    const label = `${report.displayName} ${pillWindowPercents(report).map((fraction) => Math.round(fraction * 100)).join("/")}%`;
-    const chrome = `${title}|${label}|${hottestWindowFraction(report)}`;
+    const icon = gaugeIcon(windows);
+    const label = pillText(report, model);
+    const chrome = `${title}|${label}|${windows
+      .map((window) => `${window.id}:${percentOf(window.usedFraction)}`)
+      .join(",")}`;
     if (existing) {
       if (pillChrome.get(agent.id) !== chrome) {
         pillChrome.set(agent.id, chrome);

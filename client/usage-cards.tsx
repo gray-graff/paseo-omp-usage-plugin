@@ -6,19 +6,28 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import {
   OMP_USAGE_REFRESH_MS,
+  cardWindows,
   formatAmount,
   formatReset,
   ompUsageRpc,
+  percentOf,
+  toneForPercent,
   type OmpUsagePayload,
+  type UsageTone,
 } from "../shared/usage";
 import { getPillManager } from "./pills";
 
 export interface UsageWindowView {
   id: string;
   label: string;
-  usedFraction: number | null;
+  /** Null when OMP reported no fraction for this window. */
+  percent: number | null;
+  tone: UsageTone;
+  /** Absolute spend, only when it adds information beyond the percentage. */
   amountText: string | null;
   resetsAt: number | null;
+  /** True for model-scoped quotas (Spark, gpt-reserve) shown apart from plan-wide ones. */
+  special: boolean;
 }
 
 export interface UsageCard {
@@ -81,13 +90,19 @@ export function ompCards(data: OmpUsagePayload | undefined): UsageCard[] {
     email: report.email,
     sourceLabel: "via Oh My Pi",
     errorText: null,
-    windows: report.windows.map((window) => ({
-      id: window.id,
-      label: window.label,
-      usedFraction: window.usedFraction,
-      amountText: formatAmount(window.used, window.limit, window.unit),
-      resetsAt: window.resetsAt,
-    })),
+    windows: cardWindows(report).map((window) => {
+      const percent = percentOf(window.usedFraction);
+      return {
+        id: window.id,
+        label: window.label,
+        percent,
+        tone: toneForPercent(percent),
+        // `22 / 100 percent` says nothing `22%` does not; credit counts do.
+        amountText: window.unit === "percent" ? null : formatAmount(window.used, window.limit, window.unit),
+        resetsAt: window.resetsAt,
+        special: window.tier !== null,
+      };
+    }),
   }));
 }
 
@@ -106,23 +121,36 @@ export function nativeCards(payload: PaseoProviderUsageResult | undefined): Usag
         : provider.status === "unavailable"
           ? "Not configured"
           : null,
-    windows: provider.windows.map((window) => ({
-      id: window.id,
-      label: window.label,
-      usedFraction: window.usedPct != null ? window.usedPct / 100 : null,
-      amountText: null,
-      resetsAt: window.resetsAt != null ? Date.parse(window.resetsAt) : null,
-    })),
+    windows: provider.windows.map((window) => {
+      const percent = window.usedPct ?? null;
+      return {
+        id: window.id,
+        label: window.label,
+        percent,
+        tone: toneForPercent(percent),
+        amountText: null,
+        resetsAt: window.resetsAt != null ? Date.parse(window.resetsAt) : null,
+        special: false,
+      };
+    }),
   }));
 }
 
 type ToneColor = "statusSuccess" | "statusWarning" | "statusDanger";
 
+/** Fill color for the usage bar, on the same thresholds as the percentage text. */
 export function toneFor(fraction: number | null): ToneColor {
-  if (fraction === null) return "statusSuccess";
-  if (fraction >= 0.9) return "statusDanger";
-  if (fraction >= 0.7) return "statusWarning";
+  const tone = toneForPercent(percentOf(fraction));
+  if (tone === "danger") return "statusDanger";
+  if (tone === "warning") return "statusWarning";
   return "statusSuccess";
+}
+
+/** Below the warning threshold the percentage keeps the ordinary text color. */
+function percentTextColor(theme: PluginTheme, tone: UsageTone): string {
+  if (tone === "danger") return theme.colors.statusDanger;
+  if (tone === "warning") return theme.colors.statusWarning;
+  return theme.colors.foreground;
 }
 
 interface BarProps {
@@ -131,7 +159,7 @@ interface BarProps {
 }
 
 export function UsageBar({ theme, fraction }: BarProps) {
-  const pct = fraction === null ? 0 : Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+  const pct = percentOf(fraction) ?? 0;
   return (
     <View style={{ height: 6, borderRadius: 3, backgroundColor: theme.colors.surface2, overflow: "hidden" }}>
       <View
@@ -148,31 +176,41 @@ export function UsageBar({ theme, fraction }: BarProps) {
 
 interface WindowRowProps {
   theme: PluginTheme;
-  layoutCompact: boolean;
   window: UsageWindowView;
 }
 
-export function UsageWindowRow({ theme, layoutCompact, window }: WindowRowProps) {
+export function UsageWindowRow({ theme, window }: WindowRowProps) {
   const reset = formatReset(window.resetsAt);
   const styles = useMemo(
     () => ({
       row: { gap: 6 },
       header: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: 12 },
       label: { color: theme.colors.foreground, fontSize: 13, fontWeight: "600" as const, flex: 1 },
-      amount: { color: theme.colors.foregroundMuted, fontSize: 12 },
-      reset: { color: theme.colors.foregroundMuted, fontSize: 11, textAlign: "right" as const },
+      percent: {
+        color: percentTextColor(theme, window.tone),
+        fontSize: 13,
+        fontWeight: "600" as const,
+      },
+      footer: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: 12 },
+      amount: { color: theme.colors.foregroundMuted, fontSize: 12, flex: 1 },
+      reset: { color: theme.colors.foregroundMuted, fontSize: 11 },
     }),
-    [theme],
+    [theme, window.tone],
   );
 
   return (
     <View style={styles.row}>
       <View style={styles.header}>
         <Text style={styles.label}>{window.label}</Text>
-        {window.amountText ? <Text style={styles.amount}>{window.amountText}</Text> : null}
+        <Text style={styles.percent}>{window.percent === null ? "—" : `${window.percent}%`}</Text>
       </View>
-      <UsageBar theme={theme} fraction={window.usedFraction} />
-      {reset ? <Text style={styles.reset}>{reset}</Text> : null}
+      <UsageBar theme={theme} fraction={window.percent === null ? null : window.percent / 100} />
+      {window.amountText || reset ? (
+        <View style={styles.footer}>
+          <Text style={styles.amount}>{window.amountText ?? ""}</Text>
+          {reset ? <Text style={styles.reset}>{reset}</Text> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -185,6 +223,12 @@ interface CardProps {
 
 export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
   const meta = [card.sourceLabel, card.email].filter(Boolean).join(" · ");
+  const planLabel =
+    card.planLabel && card.planLabel.trim().toLowerCase() !== card.title.trim().toLowerCase()
+      ? card.planLabel
+      : null;
+  const general = card.windows.filter((window) => !window.special);
+  const special = card.windows.filter((window) => window.special);
   const styles = useMemo(
     () => ({
       card: {
@@ -209,6 +253,19 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
       meta: { color: theme.colors.foregroundMuted, fontSize: 12 },
       error: { color: theme.colors.statusDanger, fontSize: 12 },
       windows: { gap: layoutCompact ? 10 : 12 },
+      specialGroup: {
+        gap: layoutCompact ? 10 : 12,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        paddingTop: layoutCompact ? 10 : 12,
+      },
+      specialTitle: {
+        color: theme.colors.foregroundMuted,
+        fontSize: 11,
+        fontWeight: "600" as const,
+        textTransform: "uppercase" as const,
+        letterSpacing: 0.5,
+      },
     }),
     [theme, layoutCompact],
   );
@@ -217,14 +274,22 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
     <View style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.title}>{card.title}</Text>
-        {card.planLabel ? <Text style={styles.chip}>{card.planLabel}</Text> : null}
+        {planLabel ? <Text style={styles.chip}>{planLabel}</Text> : null}
       </View>
       {meta ? <Text style={styles.meta}>{meta}</Text> : null}
       {card.errorText ? <Text style={styles.error}>{card.errorText}</Text> : null}
-      {card.windows.length > 0 ? (
+      {general.length > 0 ? (
         <View style={styles.windows}>
-          {card.windows.map((window) => (
-            <UsageWindowRow key={window.id} theme={theme} layoutCompact={layoutCompact} window={window} />
+          {general.map((window) => (
+            <UsageWindowRow key={window.id} theme={theme} window={window} />
+          ))}
+        </View>
+      ) : null}
+      {special.length > 0 ? (
+        <View style={styles.specialGroup}>
+          <Text style={styles.specialTitle}>Model quotas</Text>
+          {special.map((window) => (
+            <UsageWindowRow key={window.id} theme={theme} window={window} />
           ))}
         </View>
       ) : null}
