@@ -36,7 +36,7 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 
 Except for Codex, the pill takes every account-wide window plus model-scoped windows whose `modelId` matches the agent's model. OMP reports the model's display name while the agent carries the selector, so the comparison normalizes both (`GPT-5.3-Codex-Spark` matches `openai-codex/gpt-5.3-codex-spark`). A tier without a model id, or one matching no selectable model — `gpt-reserve` today — never reaches the pill; the cards list it under `Model quotas`.
 
-Codex mirrors OMP's request scoping: a Spark model shows only `openai-codex:spark:*`; every other Codex model shows the chat windows `openai-codex:primary` and `openai-codex:secondary`.
+Codex mirrors OMP's request scoping: a Spark model shows only `openai-codex:spark:*`; every other Codex model shows the chat windows `openai-codex:primary` and `openai-codex:secondary`. Spark comes from a selector explicitly confirmed by `omp models` — today `openai-codex/gpt-5.3-codex-spark` — not from the received windows or `scope.modelId`; if its Spark windows are absent, the pill shows `Codex —` rather than the chat budget.
 
 Windows render shortest first: 5 hours, week, month. `monthly` carries no `durationMs` in the CLI, so it is ranked after every timed window explicitly. A window without `usedFraction` stays visible as `—` in the cards; the compact pill omits it and its tick, so unknown data neither becomes `0%` nor shifts the visible tick positions.
 

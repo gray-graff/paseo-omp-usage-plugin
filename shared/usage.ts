@@ -56,6 +56,12 @@ const PROVIDER_SHORT_NAMES: Record<string, string> = {
   "openai-codex": "Codex",
 };
 
+/** Verified from `omp models --json` at OMP 18.1.20; unknown models never guess Spark. */
+const CONFIRMED_CODEX_SPARK_MODEL_IDS: Record<string, true> = {
+  gpt53codexspark: true,
+};
+
+
 export function providerDisplayName(provider: string): string {
   return PROVIDER_DISPLAY_NAMES[provider] ?? provider;
 }
@@ -106,6 +112,10 @@ function windowRank(window: OmpUsageWindow): number {
   return window.windowId === "monthly" ? MONTH_MS : Number.MAX_SAFE_INTEGER;
 }
 
+function normalizeModelRef(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 /**
  * A quota with a tier belongs to the one model it names. OMP reports that model
  * as a display name (`GPT-5.3-Codex-Spark`) while the agent carries a selector
@@ -115,8 +125,15 @@ function windowRank(window: OmpUsageWindow): number {
 export function windowAppliesToModel(window: OmpUsageWindow, model: string | null | undefined): boolean {
   if (window.tier === null) return true;
   if (!model || !window.modelId) return false;
-  const strip = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return strip(model).includes(strip(window.modelId));
+  return normalizeModelRef(model).includes(normalizeModelRef(window.modelId));
+}
+
+/** Spark is a model property, not a property of whatever usage windows arrived. */
+function isConfirmedCodexSparkModel(model: string | null | undefined): boolean {
+  if (!model || modelProviderPrefix(model) !== "openai-codex") return false;
+  const slash = model.indexOf("/");
+  const modelId = slash === -1 ? model : model.slice(slash + 1);
+  return CONFIRMED_CODEX_SPARK_MODEL_IDS[normalizeModelRef(modelId)] === true;
 }
 
 /**
@@ -129,15 +146,9 @@ export function windowAppliesToModel(window: OmpUsageWindow, model: string | nul
 export function pillWindows(report: OmpUsageReport, model: string | null | undefined): OmpUsageWindow[] {
   let windows: OmpUsageWindow[];
   if (report.provider === "openai-codex") {
-    const isSparkModel = report.windows.some(
-      (window) =>
-        window.id.startsWith("openai-codex:spark:") && windowAppliesToModel(window, model),
-    );
+    const isSparkModel = isConfirmedCodexSparkModel(model);
     windows = isSparkModel
-      ? report.windows.filter(
-          (window) =>
-            window.id.startsWith("openai-codex:spark:") && windowAppliesToModel(window, model),
-        )
+      ? report.windows.filter((window) => window.id.startsWith("openai-codex:spark:"))
       : report.windows.filter(
           (window) =>
             window.id === "openai-codex:primary" || window.id === "openai-codex:secondary",
