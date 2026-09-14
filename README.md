@@ -8,8 +8,8 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 
 | Surface | What it shows |
 | --- | --- |
-| **Composer pill** | A status dot plus `Z.AI 14/43%` — the first two windows of the plan behind the agent's current model (short window first, then the long one). Click opens the popover. |
-| **Popover** | One card for the current model's plan: provider, plan label, account email, per-window credit bars (`548 / 2000 credits`) and reset timers (`resets in 4h 5m`). A `↻` button forces a fresh fetch, bypassing the daemon-side cache. |
+| **Composer pill** | `Z.AI 14/43%` — short provider name (`Codex`, `Go`, `Z.AI`) plus the rounded percentage of every window that applies to the agent's current model, joined under one `%`. A tick next to the name carries the color, matching the card bars: green below 70%, amber from 70%, red from 90%. Click opens the popover. |
+| **Popover** | One card for the current model's plan: provider, plan label, account email, per-window percentage colored by the same thresholds, credit bars with absolute spend (`548 / 2000 credits`) and reset timers (`resets in 4h 5m`). Model-scoped quotas (Spark, gpt-reserve) sit apart in a `Model quotas` group. A `↻` button forces a fresh fetch, bypassing the daemon-side cache. |
 | **Workspace panel** | The same cards in the agent panel (`Plan usage`), for workspace and explorer locations. |
 | **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, with the snapshot timestamp. |
 | **Command center** | `Open plan usage` opens the panel. |
@@ -27,6 +27,17 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 - Fallback freshness: OMP's fallback is sticky per agent process, and timelines keep old fallback events forever. Live timeline events (arrived while connected) always count; events replayed from history count only while the agent is mid-turn. That way a stale fallback from before a restart does not stick to the pill.
 - The daemon exposes no "current model" field for OMP, so this inference is the best available signal.
 
+## Windows and model-scoped quotas
+
+`omp usage --json` reports two kinds of quota:
+
+- **Account-wide windows** (`scope.tier` absent) — the plan itself, e.g. Codex's 7-day window or Z.AI's 5-hour and weekly credit quotas.
+- **Model-scoped windows** (`scope.tier` plus `scope.modelId`) — a side budget for one model, e.g. `spark` (`GPT-5.3-Codex-Spark`) and `base-model-inference` (`gpt-reserve`).
+
+The pill takes every account-wide window plus model-scoped windows whose `modelId` matches the agent's model. OMP reports the model's display name while the agent carries the selector, so the comparison normalizes both (`GPT-5.3-Codex-Spark` matches `openai-codex/gpt-5.3-codex-spark`). A tier without a model id, or one matching no selectable model — `gpt-reserve` today — never reaches the pill; the cards list it under `Model quotas`.
+
+Windows render shortest first: 5 hours, week, month. `monthly` carries no `durationMs` in the CLI, so it is ranked after every timed window explicitly. A window the CLI reports without `usedFraction` shows `—` instead of `0%`.
+
 ## Refresh cadence
 
 - Client polls every **5 minutes**.
@@ -43,7 +54,7 @@ client/pills.tsx        pill manager: agent snapshots, pill sync, fallback watch
 client/usage-popover.tsx  popover with per-window cards + refresh button
 client/usage-panel.tsx  workspace panel
 client/usage-settings.tsx settings screen
-shared/usage.ts         RPC schema + provider/model mapping helpers
+shared/usage.ts         RPC schema, provider/model mapping, window selection, pill text
 ```
 
 The server runs one `omp usage --json` spawn per snapshot (15s timeout, 10 MB output cap), validates the payload once, and serves every client from that snapshot. The client keeps a snapshot cache per agent so `useSyncExternalStore` gets stable references.

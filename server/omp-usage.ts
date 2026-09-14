@@ -30,7 +30,23 @@ const OmpLimitSchema = z
     id: z.string().optional(),
     label: z.string().optional(),
     amount: OmpAmountSchema.nullish(),
-    window: z.object({ resetsAt: z.number().nullish() }).passthrough().nullish(),
+    // `tier`/`modelId` mark a quota that belongs to one model instead of the whole account.
+    scope: z
+      .object({
+        windowId: z.string().nullish(),
+        tier: z.string().nullish(),
+        modelId: z.string().nullish(),
+      })
+      .passthrough()
+      .nullish(),
+    window: z
+      .object({
+        id: z.string().nullish(),
+        durationMs: z.number().nullish(),
+        resetsAt: z.number().nullish(),
+      })
+      .passthrough()
+      .nullish(),
   })
   .passthrough();
 
@@ -112,15 +128,21 @@ function mapPayload(raw: unknown): OmpUsagePayload {
 
     const windows: OmpUsagePayload["reports"][number]["windows"] = [];
     for (const limit of report.limits ?? []) {
-      const amount = limit.amount;
-      if (!amount || typeof amount.usedFraction !== "number") continue;
+      const amount = limit.amount ?? null;
+      // A window without `usedFraction` still has a name and a reset time: keep
+      // it and let the UI show the gap instead of dropping the quota entirely.
+      const fraction = amount?.usedFraction;
       windows.push({
         id: limit.id ?? `${report.provider}:${windows.length}`,
         label: limit.label && limit.label.length > 0 ? limit.label : "Usage",
-        used: amount.used ?? null,
-        limit: amount.limit ?? null,
-        unit: amount.unit ?? null,
-        usedFraction: Math.max(0, Math.min(1, amount.usedFraction)),
+        windowId: limit.window?.id ?? limit.scope?.windowId ?? null,
+        durationMs: limit.window?.durationMs ?? null,
+        tier: limit.scope?.tier ?? null,
+        modelId: limit.scope?.modelId ?? null,
+        used: amount?.used ?? null,
+        limit: amount?.limit ?? null,
+        unit: amount?.unit ?? null,
+        usedFraction: typeof fraction === "number" ? Math.max(0, Math.min(1, fraction)) : null,
         resetsAt: limit.window?.resetsAt ?? null,
       });
     }
