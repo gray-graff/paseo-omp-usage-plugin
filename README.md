@@ -14,12 +14,6 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 | **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, with the snapshot timestamp. |
 | **Command center** | `Open plan usage` opens the panel. |
 
-## Screenshots
-
-| Z.AI plan | Codex plan | Settings screen |
-| --- | --- | --- |
-| ![Z.AI popover](docs/screenshots/zai-popover.png) | ![Codex popover](docs/screenshots/codex-popover.png) | ![Settings screen](docs/screenshots/settings-screen.png) |
-
 ## Plan binding and fallback
 
 - The pill and popover track the **agent's current model** (`provider/model-id`). The model prefix maps to the usage provider with the same id: `zai/glm-5.3-flash` → `zai`, `opencode-go/deepseek-v4-flash` → `opencode-go`, `openai/gpt-5.4` → `openai-codex`.
@@ -74,7 +68,7 @@ paseo plugin install /absolute/path/to/omp-usage-plugin
 Git source:
 
 ```bash
-paseo plugin add <owner>/omp-usage-plugin
+paseo plugin install gray-graff/paseo-omp-usage-plugin
 paseo plugin update omp-usage-plugin
 ```
 
