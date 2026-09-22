@@ -13,6 +13,8 @@ export const ompUsageRpc = defineRpc({
       z.object({
         provider: z.string(),
         displayName: z.string(),
+        /** When OMP last reached the provider; older than `generatedAt` means a cached snapshot. */
+        fetchedAt: z.number().nullable(),
         planLabel: z.string().nullable(),
         email: z.string().nullable(),
         windows: z.array(
@@ -210,6 +212,31 @@ export function fallbackModelFromTimeline(page: unknown): string | null {
     }
   }
   return null;
+}
+
+/**
+ * OMP keeps serving a provider's last successful snapshot when its API stops
+ * answering (expired subscription, revoked key) without flagging it, so treat a
+ * report much older than the snapshot itself as stale. The threshold sits above
+ * OMP's own per-provider refresh interval to avoid crying stale on fresh data.
+ */
+export const STALE_AFTER_MS = 30 * 60 * 1000;
+
+function formatAge(ms: number): string {
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+/** Age note for a report OMP could not refresh, or null while the data is current. */
+export function formatStale(fetchedAt: number | null, referenceAt: number | null): string | null {
+  if (fetchedAt === null) return null;
+  const reference = referenceAt ?? Date.now();
+  const age = reference - fetchedAt;
+  if (age < STALE_AFTER_MS) return null;
+  return `stale · OMP last reached this provider ${formatAge(age)} ago`;
 }
 
 export function formatReset(resetsAt: number | null): string | null {

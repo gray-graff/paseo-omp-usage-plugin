@@ -11,7 +11,7 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 | **Composer pill** | `Z.AI 14/43%` — short provider name (`Codex`, `Go`, `Z.AI`) plus the rounded percentage of every window that applies to the agent's current model, joined under one `%`. A tick next to the name carries the color, matching the card bars: green below 70%, amber from 70%, red from 90%. Click opens the popover. |
 | **Popover** | One card for the current model's plan: provider, plan label, account email, per-window percentage colored by the same thresholds, credit bars with absolute spend (`548 / 2000 credits`) and reset timers (`resets in 4h 5m`). Model-scoped quotas (Spark, gpt-reserve) sit apart in a `Model quotas` group. A `↻` button forces a fresh fetch, bypassing the daemon-side cache. |
 | **Workspace panel** | The same cards in the agent panel (`Plan usage`), for workspace and explorer locations. |
-| **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, with the snapshot timestamp. |
+| **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, with the snapshot timestamp and a `↻` button for a forced refresh. |
 | **Command center** | `Open plan usage` opens the panel. |
 
 ## Plan binding and fallback
@@ -39,6 +39,8 @@ Windows render shortest first: 5 hours, week, month. `monthly` carries no `durat
 - Client polls every **5 minutes**.
 - The plugin server caches one CLI snapshot for **60 seconds** no matter how many clients ask.
 - Model changes and fallback events update instantly via subscriptions.
+- The popover and the settings screen each carry a `↻` that forces a fetch past that 60s cache.
+- OMP keeps serving a provider's last successful snapshot when its API stops answering (expired subscription, revoked key), and marks it neither stale nor failed. Cards compare each report's `fetchedAt` against the snapshot time and warn — `stale · OMP last reached this provider 25h ago` — once the gap passes 30 minutes. Only OMP can make those numbers current again.
 
 ## Architecture
 
@@ -92,5 +94,6 @@ npm run typecheck
 ## Troubleshooting
 
 - **No pill**: the agent's model has no matching usage report (plan not configured in OMP, or the CLI is missing/unauthenticated). Check `omp usage --json` on the daemon host.
-- **Stale numbers**: within the 60s server cache; use the popover's `↻` for a forced refresh.
+- **Stale numbers**: within the 60s server cache; use the `↻` in the popover or the settings screen for a forced refresh.
+- **Card says `stale`**: OMP itself has not reached that provider in a while and is replaying an old snapshot; `↻` cannot fix it. Check the subscription and OMP's own auth for that provider.
 - **Plugin errors**: Settings → Plugins → omp-usage-plugin → logs, or `paseo plugin logs omp-usage-plugin`.

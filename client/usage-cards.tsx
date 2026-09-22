@@ -9,6 +9,7 @@ import {
   cardWindows,
   formatAmount,
   formatReset,
+  formatStale,
   ompUsageRpc,
   percentOf,
   toneForPercent,
@@ -38,6 +39,8 @@ export interface UsageCard {
   email: string | null;
   sourceLabel: string | null;
   errorText: string | null;
+  /** Set when OMP is serving a snapshot it could not refresh; the numbers are old. */
+  staleText: string | null;
   windows: UsageWindowView[];
 }
 export function useOmpUsage() {
@@ -90,6 +93,7 @@ export function ompCards(data: OmpUsagePayload | undefined): UsageCard[] {
     email: report.email,
     sourceLabel: "via Oh My Pi",
     errorText: null,
+    staleText: formatStale(report.fetchedAt, data.generatedAt),
     windows: cardWindows(report).map((window) => {
       const percent = percentOf(window.usedFraction);
       return {
@@ -121,6 +125,7 @@ export function nativeCards(payload: PaseoProviderUsageResult | undefined): Usag
         : provider.status === "unavailable"
           ? "Not configured"
           : null,
+    staleText: null,
     windows: provider.windows.map((window) => {
       const percent = window.usedPct ?? null;
       return {
@@ -251,6 +256,7 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
         overflow: "hidden" as const,
       },
       meta: { color: theme.colors.foregroundMuted, fontSize: 12 },
+      stale: { color: theme.colors.statusWarning, fontSize: 11 },
       error: { color: theme.colors.statusDanger, fontSize: 12 },
       windows: { gap: layoutCompact ? 10 : 12 },
       specialGroup: {
@@ -277,6 +283,7 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
         {planLabel ? <Text style={styles.chip}>{planLabel}</Text> : null}
       </View>
       {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+      {card.staleText ? <Text style={styles.stale}>{card.staleText}</Text> : null}
       {card.errorText ? <Text style={styles.error}>{card.errorText}</Text> : null}
       {general.length > 0 ? (
         <View style={styles.windows}>

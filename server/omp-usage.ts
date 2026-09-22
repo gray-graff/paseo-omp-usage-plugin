@@ -53,6 +53,7 @@ const OmpLimitSchema = z
 const OmpReportSchema = z
   .object({
     provider: z.string(),
+    fetchedAt: z.number().nullish(),
     metadata: z
       .object({ planType: z.unknown().nullish(), email: z.unknown().nullish() })
       .passthrough()
@@ -147,7 +148,14 @@ function mapPayload(raw: unknown): OmpUsagePayload {
       });
     }
 
-    reports.push({ provider: report.provider, displayName: providerDisplayName(report.provider), planLabel, email, windows });
+    reports.push({
+      provider: report.provider,
+      displayName: providerDisplayName(report.provider),
+      fetchedAt: report.fetchedAt ?? null,
+      planLabel,
+      email,
+      windows,
+    });
   }
 
   return { generatedAt: output.generatedAt ?? null, reports, error: null };
