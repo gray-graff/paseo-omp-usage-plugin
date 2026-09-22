@@ -40,7 +40,7 @@ Windows render shortest first: 5 hours, week, month. `monthly` carries no `durat
 - The plugin server caches one CLI snapshot for **60 seconds** no matter how many clients ask.
 - Model changes and fallback events update instantly via subscriptions.
 - The popover and the settings screen each carry a `↻` that forces a fetch past that 60s cache.
-- OMP keeps serving a provider's last successful snapshot when its API stops answering (expired subscription, revoked key), and marks it neither stale nor failed. Cards compare each report's `fetchedAt` against the snapshot time and warn — `stale · OMP last reached this provider 25h ago` — once the gap passes 30 minutes. Only OMP can make those numbers current again, so the warning carries a `Manage this plan ↗` link to the vendor's plan page (`shared/usage.ts`, `PROVIDER_PLAN_URLS`).
+- OMP keeps serving a provider's last successful snapshot when its API stops answering (expired subscription, revoked key), and marks it neither stale nor failed. Cards compare each report's `fetchedAt` against the snapshot time and warn — `stale · OMP last reached this provider 25h ago` — once the gap passes 30 minutes. Only OMP can make those numbers current again, so on Paseo 0.9 and newer the warning carries a `Manage this plan ↗` link to the vendor's plan page (`shared/usage.ts`, `PROVIDER_PLAN_URLS`).
 
 ## Architecture
 
@@ -74,7 +74,7 @@ paseo plugin install gray-graff/paseo-omp-usage-plugin
 paseo plugin update omp-usage-plugin
 ```
 
-Requires Paseo 0.9 or newer (`requirements.paseo` in `paseo-plugin.json`): the settings screen uses the host's `Settings*` components and the cards use `ExternalLink`, both from `@getpaseo/plugin` 0.9.
+Runs on Paseo 0.8 and newer (`requirements.paseo` in `paseo-plugin.json`). The settings screen uses the host's `Settings*` components, which 0.8 already ships. `ExternalLink` is 0.9-only, so the cards read it off the module namespace and omit the plan link on 0.8 instead of failing to load.
 
 No build step is declared — the host compiles the TypeScript itself. Reload from Settings → Plugins → omp-usage-plugin after editing a directory source.
 

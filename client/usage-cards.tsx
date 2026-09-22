@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import type { PaseoProviderUsageResult } from "@getpaseo/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { ExternalLink } from "@getpaseo/plugin/client/ui";
+import * as pluginUi from "@getpaseo/plugin/client/ui";
 import {
   OMP_USAGE_REFRESH_MS,
   cardWindows,
@@ -19,6 +19,17 @@ import {
   type UsageTone,
 } from "../shared/usage";
 import { getPillManager } from "./pills";
+
+/**
+ * `ExternalLink` arrived in Paseo 0.9; on 0.8 the host exports nothing under
+ * that name. Read it off the namespace so the plugin keeps loading on 0.8 and
+ * simply omits the link there.
+ */
+const ExternalLink = (
+  pluginUi as {
+    ExternalLink?: ComponentType<{ href: string; children: ReactNode; accessibilityLabel?: string }>;
+  }
+).ExternalLink;
 
 export interface UsageWindowView {
   id: string;
@@ -293,7 +304,7 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
       {card.staleText ? (
         <>
           <Text style={styles.stale}>{card.staleText}</Text>
-          {card.planUrl ? (
+          {card.planUrl && ExternalLink ? (
             <ExternalLink href={card.planUrl} accessibilityLabel={`Manage the ${card.title} plan`}>
               <Text style={styles.link}>Manage this plan ↗</Text>
             </ExternalLink>
