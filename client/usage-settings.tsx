@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
+import { ScrollView } from "@getpaseo/plugin/client/react-native";
+import { SettingsCard, SettingsRow, SettingsSection } from "@getpaseo/plugin/client/ui";
 import { PLUGIN_VERSION } from "../shared/version";
 import { UsageCardList, ompCards, useOmpUsage } from "./usage-cards";
 
@@ -14,13 +16,10 @@ export function OmpUsageSettings({ theme, layout }: PluginSurfaceProps) {
   const styles = useMemo(
     () => ({
       screen: { gap: layout.compact ? 14 : 18, backgroundColor: theme.colors.surface0 },
-      section: { gap: layout.compact ? 8 : 10 },
-      header: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
-      title: { color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" as const, textTransform: "uppercase" as const, letterSpacing: 0.5, flex: 1 },
+      list: { gap: layout.compact ? 8 : 10 },
       refreshButton: { padding: 4 },
       refreshGlyph: { color: theme.colors.foregroundMuted, fontSize: 14, lineHeight: 16 },
       error: { color: theme.colors.statusDanger, fontSize: 12 },
-      footnote: { color: theme.colors.foregroundMuted, fontSize: 11 },
       loading: { alignSelf: "center" as const, paddingVertical: 24 },
     }),
     [theme, layout.compact],
@@ -31,9 +30,10 @@ export function OmpUsageSettings({ theme, layout }: PluginSurfaceProps) {
   const generatedAt = omp.data?.generatedAt ? new Date(omp.data.generatedAt).toLocaleTimeString() : null;
   return (
     <ScrollView contentContainerStyle={styles.screen}>
-      <View style={styles.section}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Via Oh My Pi · v{PLUGIN_VERSION}</Text>
+      <SettingsSection
+        title="Plan usage"
+        info="Quotas as reported by the local omp CLI."
+        trailing={
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Refresh usage"
@@ -51,11 +51,17 @@ export function OmpUsageSettings({ theme, layout }: PluginSurfaceProps) {
               <Text style={styles.refreshGlyph}>↻</Text>
             )}
           </Pressable>
+        }
+      >
+        <View style={styles.list}>
+          {omp.data?.error ? <Text style={styles.error}>{omp.data.error}</Text> : null}
+          <UsageCardList theme={theme} layoutCompact={layout.compact} cards={ompList} emptyText="No OMP subscriptions found" />
         </View>
-        {omp.data?.error ? <Text style={styles.error}>{omp.data.error}</Text> : null}
-        <UsageCardList theme={theme} layoutCompact={layout.compact} cards={ompList} emptyText="No OMP subscriptions found" />
-      </View>
-      {generatedAt ? <Text style={styles.footnote}>OMP snapshot at {generatedAt}</Text> : null}
+        <SettingsCard>
+          <SettingsRow label="OMP snapshot" hint={generatedAt ?? "not fetched yet"} />
+          <SettingsRow label="Plugin version" hint={`v${PLUGIN_VERSION}`} />
+        </SettingsCard>
+      </SettingsSection>
     </ScrollView>
   );
 }

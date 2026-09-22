@@ -11,7 +11,7 @@ OMP is the agent harness behind Paseo's `omp` provider. Its CLI (`omp usage --js
 | **Composer pill** | `Z.AI 14/43%` — short provider name (`Codex`, `Go`, `Z.AI`) plus the rounded percentage of every window that applies to the agent's current model, joined under one `%`. A tick next to the name carries the color, matching the card bars: green below 70%, amber from 70%, red from 90%. Click opens the popover. |
 | **Popover** | One card for the current model's plan: provider, plan label, account email, per-window percentage colored by the same thresholds, credit bars with absolute spend (`548 / 2000 credits`) and reset timers (`resets in 4h 5m`). Model-scoped quotas (Spark, gpt-reserve) sit apart in a `Model quotas` group. A `↻` button forces a fresh fetch, bypassing the daemon-side cache. |
 | **Workspace panel** | The same cards in the agent panel (`Plan usage`), for workspace and explorer locations. |
-| **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, with the snapshot timestamp and a `↻` button for a forced refresh. |
+| **Settings screen** | Settings → Plugins → Plan usage: every OMP subscription found by the CLI, on host-native settings rows, with the snapshot timestamp and a `↻` button for a forced refresh. |
 | **Command center** | `Open plan usage` opens the panel. |
 
 ## Plan binding and fallback
@@ -40,7 +40,7 @@ Windows render shortest first: 5 hours, week, month. `monthly` carries no `durat
 - The plugin server caches one CLI snapshot for **60 seconds** no matter how many clients ask.
 - Model changes and fallback events update instantly via subscriptions.
 - The popover and the settings screen each carry a `↻` that forces a fetch past that 60s cache.
-- OMP keeps serving a provider's last successful snapshot when its API stops answering (expired subscription, revoked key), and marks it neither stale nor failed. Cards compare each report's `fetchedAt` against the snapshot time and warn — `stale · OMP last reached this provider 25h ago` — once the gap passes 30 minutes. Only OMP can make those numbers current again.
+- OMP keeps serving a provider's last successful snapshot when its API stops answering (expired subscription, revoked key), and marks it neither stale nor failed. Cards compare each report's `fetchedAt` against the snapshot time and warn — `stale · OMP last reached this provider 25h ago` — once the gap passes 30 minutes. Only OMP can make those numbers current again, so the warning carries a `Manage this plan ↗` link to the vendor's plan page (`shared/usage.ts`, `PROVIDER_PLAN_URLS`).
 
 ## Architecture
 
@@ -73,6 +73,8 @@ Git source:
 paseo plugin install gray-graff/paseo-omp-usage-plugin
 paseo plugin update omp-usage-plugin
 ```
+
+Requires Paseo 0.9 or newer (`requirements.paseo` in `paseo-plugin.json`): the settings screen uses the host's `Settings*` components and the cards use `ExternalLink`, both from `@getpaseo/plugin` 0.9.
 
 No build step is declared — the host compiles the TypeScript itself. Reload from Settings → Plugins → omp-usage-plugin after editing a directory source.
 
