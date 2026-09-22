@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import type { PaseoProviderUsageResult } from "@getpaseo/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
+import { ExternalLink } from "@getpaseo/plugin/client/ui";
 import {
   OMP_USAGE_REFRESH_MS,
   cardWindows,
@@ -12,6 +13,7 @@ import {
   formatStale,
   ompUsageRpc,
   percentOf,
+  providerPlanUrl,
   toneForPercent,
   type OmpUsagePayload,
   type UsageTone,
@@ -41,6 +43,8 @@ export interface UsageCard {
   errorText: string | null;
   /** Set when OMP is serving a snapshot it could not refresh; the numbers are old. */
   staleText: string | null;
+  /** Vendor page where the plan is managed, offered alongside `staleText`. */
+  planUrl: string | null;
   windows: UsageWindowView[];
 }
 export function useOmpUsage() {
@@ -94,6 +98,7 @@ export function ompCards(data: OmpUsagePayload | undefined): UsageCard[] {
     sourceLabel: "via Oh My Pi",
     errorText: null,
     staleText: formatStale(report.fetchedAt, data.generatedAt),
+    planUrl: providerPlanUrl(report.provider),
     windows: cardWindows(report).map((window) => {
       const percent = percentOf(window.usedFraction);
       return {
@@ -126,6 +131,7 @@ export function nativeCards(payload: PaseoProviderUsageResult | undefined): Usag
           ? "Not configured"
           : null,
     staleText: null,
+    planUrl: null,
     windows: provider.windows.map((window) => {
       const percent = window.usedPct ?? null;
       return {
@@ -257,6 +263,7 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
       },
       meta: { color: theme.colors.foregroundMuted, fontSize: 12 },
       stale: { color: theme.colors.statusWarning, fontSize: 11 },
+      link: { color: theme.colors.accent, fontSize: 11 },
       error: { color: theme.colors.statusDanger, fontSize: 12 },
       windows: { gap: layoutCompact ? 10 : 12 },
       specialGroup: {
@@ -283,7 +290,16 @@ export function UsageCardRow({ theme, layoutCompact, card }: CardProps) {
         {planLabel ? <Text style={styles.chip}>{planLabel}</Text> : null}
       </View>
       {meta ? <Text style={styles.meta}>{meta}</Text> : null}
-      {card.staleText ? <Text style={styles.stale}>{card.staleText}</Text> : null}
+      {card.staleText ? (
+        <>
+          <Text style={styles.stale}>{card.staleText}</Text>
+          {card.planUrl ? (
+            <ExternalLink href={card.planUrl} accessibilityLabel={`Manage the ${card.title} plan`}>
+              <Text style={styles.link}>Manage this plan ↗</Text>
+            </ExternalLink>
+          ) : null}
+        </>
+      ) : null}
       {card.errorText ? <Text style={styles.error}>{card.errorText}</Text> : null}
       {general.length > 0 ? (
         <View style={styles.windows}>

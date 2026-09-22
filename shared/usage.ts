@@ -58,6 +58,16 @@ const PROVIDER_SHORT_NAMES: Record<string, string> = {
   "openai-codex": "Codex",
 };
 
+/**
+ * Where a plan is managed when its numbers go stale and OMP cannot refresh them.
+ * OMP reports no such link itself, so these are the vendors' own plan pages.
+ */
+const PROVIDER_PLAN_URLS: Record<string, string> = {
+  zai: "https://z.ai/subscribe",
+  "opencode-go": "https://opencode.ai/go",
+  "openai-codex": "https://chatgpt.com/codex",
+};
+
 /** Verified from `omp models --json` at OMP 18.1.20; unknown models never guess Spark. */
 const CONFIRMED_CODEX_SPARK_MODEL_IDS: Record<string, true> = {
   gpt53codexspark: true,
@@ -66,6 +76,11 @@ const CONFIRMED_CODEX_SPARK_MODEL_IDS: Record<string, true> = {
 
 export function providerDisplayName(provider: string): string {
   return PROVIDER_DISPLAY_NAMES[provider] ?? provider;
+}
+
+/** Plan page for a provider, or null for one we have no link for. */
+export function providerPlanUrl(provider: string): string | null {
+  return PROVIDER_PLAN_URLS[provider] ?? null;
 }
 
 export function providerShortName(provider: string): string {
