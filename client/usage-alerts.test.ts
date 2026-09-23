@@ -7,18 +7,18 @@ const HOUR_MS = 60 * 60 * 1000;
 
 function entry(percent: number | null): { key: string; subject: string; percent: number | null; tone: "normal" | "warning" | "danger" } {
   const tone = percent === null ? "normal" : percent >= 90 ? "danger" : percent >= 70 ? "warning" : "normal";
-  return { key: "zai|zai:5h", subject: "Z.AI 5h", percent, tone };
+  return { key: "zai|zai:5h", subject: "Z.AI: 5h", percent, tone };
 }
 
 test("alerts fire on the edge into a higher tone, not on every refresh", () => {
   const seen = new Map<string, "normal" | "warning" | "danger">();
 
   const first = collectUsageAlerts(seen, [entry(74)]);
-  assert.deepEqual(first, [{ key: "zai|zai:5h", message: "Z.AI 5h 74% used", variant: "warning" }]);
+  assert.deepEqual(first, [{ key: "zai|zai:5h", message: "Z.AI: 5h 74% used", variant: "warning" }]);
 
   assert.deepEqual(collectUsageAlerts(seen, [entry(78)]), [], "the same tone stays quiet");
   assert.deepEqual(collectUsageAlerts(seen, [entry(95)]), [
-    { key: "zai|zai:5h", message: "Z.AI 5h 95% used", variant: "error" },
+    { key: "zai|zai:5h", message: "Z.AI: 5h 95% used", variant: "error" },
   ]);
   assert.deepEqual(collectUsageAlerts(seen, [entry(96)]), [], "danger reports once");
 });

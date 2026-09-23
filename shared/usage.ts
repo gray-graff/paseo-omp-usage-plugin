@@ -229,7 +229,8 @@ export function pillAlertEntries(report: OmpUsageReport, model: string | null | 
     const percent = percentOf(window.usedFraction);
     return {
       key: `${report.provider}|${window.id}`,
-      subject: `${name} ${window.label.toLowerCase()}`,
+      // Separate with a colon: OMP's own labels repeat the provider ("ZAI Weekly Credit Quota").
+      subject: `${name}: ${window.label}`,
       percent,
       tone: toneForPercent(percent),
     };
