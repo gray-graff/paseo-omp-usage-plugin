@@ -202,12 +202,38 @@ export function cardWindows(report: OmpUsageReport): OmpUsageWindow[] {
  * Percentages join with `/` under a single `%`; the matching tick gauge uses
  * the same known-fraction windows.
  */
-export function pillText(report: OmpUsageReport, model: string | null | undefined): string {
+export function pillText(report: OmpUsageReport, model: string | null | undefined, stale = false): string {
   const percents = pillDisplayWindows(report, model)
     .map((window) => percentOf(window.usedFraction))
     .filter((percent): percent is number => percent !== null);
   const name = providerShortName(report.provider);
-  return percents.length === 0 ? `${name} —` : `${name} ${percents.join("/")}%`;
+  if (percents.length === 0) return `${name} —`;
+  // `~` marks a snapshot OMP could not refresh, the same signal the agy plugin shows.
+  return `${name} ${stale ? "~" : ""}${percents.join("/")}%`;
+}
+
+/**
+ * Threshold subjects for the windows the pill displays: one plan reports once no
+ * matter how many agents run on it, so the key carries no agent id.
+ */
+export interface PillAlertEntry {
+  key: string;
+  subject: string;
+  percent: number | null;
+  tone: UsageTone;
+}
+
+export function pillAlertEntries(report: OmpUsageReport, model: string | null | undefined): PillAlertEntry[] {
+  const name = providerShortName(report.provider);
+  return pillDisplayWindows(report, model).map((window) => {
+    const percent = percentOf(window.usedFraction);
+    return {
+      key: `${report.provider}|${window.id}`,
+      subject: `${name} ${window.label.toLowerCase()}`,
+      percent,
+      tone: toneForPercent(percent),
+    };
+  });
 }
 
 type TimelinePage = {
@@ -245,11 +271,15 @@ function formatAge(ms: number): string {
   return `${Math.round(hours / 24)}d`;
 }
 
+/** True when OMP served a snapshot it could not refresh, so the numbers are old. */
+export function isStale(fetchedAt: number | null, referenceAt: number | null): boolean {
+  return fetchedAt !== null && (referenceAt ?? Date.now()) - fetchedAt >= STALE_AFTER_MS;
+}
+
 /** Age note for a report OMP could not refresh, or null while the data is current. */
 export function formatStale(fetchedAt: number | null, referenceAt: number | null): string | null {
   if (fetchedAt === null) return null;
-  const reference = referenceAt ?? Date.now();
-  const age = reference - fetchedAt;
+  const age = (referenceAt ?? Date.now()) - fetchedAt;
   if (age < STALE_AFTER_MS) return null;
   return `stale · OMP last reached this provider ${formatAge(age)} ago`;
 }

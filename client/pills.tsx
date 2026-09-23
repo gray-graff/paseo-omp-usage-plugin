@@ -1,19 +1,27 @@
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import type { PaseoApi } from "@getpaseo/client";
 import type { PluginButtonIconProps, PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
+import { useToast } from "@getpaseo/plugin/client/react-native";
 import { View } from "react-native";
 import {
   OMP_USAGE_REFRESH_MS,
   fallbackModelFromTimeline,
+  isStale,
   percentOf,
+  pillAlertEntries,
   pillDisplayWindows,
   pillText,
   usageProvidersForModel,
   type OmpUsagePayload,
   type OmpUsageWindow,
+  type UsageTone,
 } from "../shared/usage";
+import { collectUsageAlerts, type AlertEntry } from "./usage-alerts";
 import { toneFor } from "./usage-cards";
 import { UsagePopover } from "./usage-popover";
+
+/** A finished turn is when a plan actually moves; a burst of turn ends costs one refresh. */
+const TURN_END_REFRESH_MS = 30_000;
 
 interface AgentEntry {
   id: string;
@@ -61,11 +69,35 @@ export function stopPillManager(): void {
   activeManager = null;
 }
 
+/** Tone memory shared by every pill: one plan speaks once, whichever pill mounts first. */
+const seenAlertTones = new Map<string, UsageTone>();
+
+/**
+ * Fires threshold toasts from inside the composer pill's icon. The host mounts
+ * that icon for every agent and wraps it in its toast provider, so alerts need
+ * no surface to be open. Remounting the icon on each pill update is expected:
+ * the tone memory lives outside the component.
+ */
+function UsageAlertWatcher({ entries }: { entries: readonly AlertEntry[] }) {
+  const toast = useToast();
+  const signature = entries.map((entry) => `${entry.key}:${entry.percent}:${entry.tone}`).join(",");
+  useEffect(() => {
+    // `signature` is the content of `entries`; the array itself is rebuilt every render.
+    for (const alert of collectUsageAlerts(seenAlertTones, entries)) {
+      toast.show(alert.message, { variant: alert.variant });
+    }
+  }, [signature, toast]);
+  return null;
+}
+
 /**
  * A composer pill always renders its icon, so the pill's color signal lives in
  * that fixed slot: one tick per applicable window, colored like its bar.
  */
-function gaugeIcon(windows: OmpUsageWindow[]): ComponentType<PluginButtonIconProps> {
+function gaugeIcon(
+  windows: OmpUsageWindow[],
+  entries: readonly AlertEntry[],
+): ComponentType<PluginButtonIconProps> {
   return function PillGauge({ theme, size }: PluginButtonIconProps) {
     const gap = 2;
     const count = Math.max(1, windows.length);
@@ -84,6 +116,7 @@ function gaugeIcon(windows: OmpUsageWindow[]): ComponentType<PluginButtonIconPro
             }}
           />
         ))}
+        <UsageAlertWatcher entries={entries} />
       </View>
     );
   };
@@ -104,6 +137,9 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
   // Module-private interval handle; the runtime type differs between Node and RN.
   let timer: ReturnType<typeof setInterval> | null = null;
   let reports: OmpUsagePayload["reports"] = [];
+  /** Snapshot the reports came from; staleness is measured against it, not the wall clock. */
+  let snapshotAt: number | null = null;
+  let lastUsageAt = 0;
 
   // useSyncExternalStore requires a referentially stable snapshot; cache the
   // derived state per entry instead of recomputing on every read.
@@ -132,8 +168,8 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
     const model = agent.fallbackModel ?? agent.baseModel;
     const windows = pillDisplayWindows(report, model);
     const title = `${report.displayName} plan usage`;
-    const icon = gaugeIcon(windows);
-    const label = pillText(report, model);
+    const icon = gaugeIcon(windows, pillAlertEntries(report, model));
+    const label = pillText(report, model, isStale(report.fetchedAt, snapshotAt));
     const chrome = `${title}|${label}|${windows
       .map((window) => `${window.id}:${percentOf(window.usedFraction)}`)
       .join(",")}`;
@@ -252,11 +288,23 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
     try {
       const payload = await fetchUsage({ force });
       reports = payload.reports;
+      snapshotAt = payload.generatedAt;
+      lastUsageAt = Date.now();
     } catch {
       // Keep the last reports; the RPC output already carries an error field
       // that surfaces in panels.
     }
     syncPills();
+  }
+
+  /**
+   * Refetch once a turn ends: that is when a plan actually moves, so the pill is
+   * right when it matters instead of up to five minutes later. Throttled, because
+   * several agents finishing together are one plan's worth of news.
+   */
+  function scheduleTurnEndRefresh(): void {
+    if (stopped || Date.now() - lastUsageAt < TURN_END_REFRESH_MS) return;
+    void refreshUsage(true);
   }
 
   function start(): void {
@@ -289,6 +337,7 @@ export function createPillManager({ paseo, fetchUsage, addComposerPill }: PillMa
       setAgent(entry);
       watchTimeline(entry.id);
       syncPill(entry);
+      if (current?.running === true && !entry.running) scheduleTurnEndRefresh();
     });
     void refreshAgents();
     void refreshUsage();

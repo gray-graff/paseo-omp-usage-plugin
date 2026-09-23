@@ -1,9 +1,11 @@
 {
   "name": "omp-usage-plugin",
+  "type": "module",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types 'client/**/*.test.ts'"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.8.0",

@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import type { PaseoProviderUsageResult } from "@getpaseo/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
+import { useToast } from "@getpaseo/plugin/client/react-native";
 import * as pluginUi from "@getpaseo/plugin/client/ui";
 import {
   OMP_USAGE_REFRESH_MS,
@@ -61,6 +62,7 @@ export interface UsageCard {
 export function useOmpUsage() {
   const fetchUsage = useRpc(ompUsageRpc);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const query = useQuery({
     queryKey: ["omp-usage"],
@@ -69,7 +71,11 @@ export function useOmpUsage() {
     staleTime: 60_000,
     retry: 1,
   });
-  /** Manual refresh; `force` bypasses the daemon-side 60s cache. */
+  /**
+   * Manual refresh; `force` bypasses the daemon-side 60s cache. Callers fire it
+   * without awaiting, so a failure is reported here instead of rejecting into
+   * nowhere.
+   */
   const refresh = useCallback(
     async (force = true) => {
       setIsRefreshing(true);
@@ -78,11 +84,14 @@ export function useOmpUsage() {
         queryClient.setQueryData(["omp-usage"], payload);
         await getPillManager()?.refreshUsage(force);
         return payload;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+        return null;
       } finally {
         setIsRefreshing(false);
       }
     },
-    [fetchUsage, queryClient],
+    [fetchUsage, queryClient, toast],
   );
   return { ...query, refresh, isRefreshing };
 }
